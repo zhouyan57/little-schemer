@@ -13,6 +13,7 @@
 (define build (lambda (x y) (cons x (cons y '()))))
 (define first (lambda (x) (car x)))
 (define second (lambda (x) (car (cdr x))))
+(define third (lambda (x) (car (cdr (cdr x)))))
 
 (define new-entry build)
 
@@ -100,23 +101,122 @@
 
 (define *quote
   (lambda (e table)
-    ))
+    (text-of e)))
+
+(define text-of second)
 
 (define *identifier
   (lambda (e table)
-    ))
+    (lookup-in-table e table initial-table)))
+
+(define initial-table
+  (lambda (name)
+    (error "undefined name")))
 
 (define *lambda
   (lambda (e table)
-    ))
+    (build (quote non-primitive)
+           (cons table (cdr e)))))
 
-(define *application
-  (lambda (e table)
-    ))
+(define table-of first)
+(define formals-of second)
+(define body-of third)
 
 (define *cond
   (lambda (e table)
-    ))
+    (evcon (cond-lines-of e) table)))
+
+(define cond-lines-of cdr)
+(define question-of first)
+(define answer-of second)
+
+(define evcon
+  (lambda (lines table)
+    (cond
+      ((else? (question-of (car lines)))
+       (meaning (answer-of (car lines)) table))
+      ((meaning (question-of (car lines)) table)
+       (meaning (answer-of (car lines)) table))
+      (else (evcon (cdr lines) table)))))
+
+(define else?
+  (lambda (x)
+    (cond
+      ((atom? x) (eq? x 'else))
+      (else #f))))
+
+(define *application
+  (lambda (e table)
+    (apply (meaning (function-of e) table)
+      (evlis (arguments-of e) table))))
+
+(define function-of car)
+(define arguments-of cdr)
+
+(define primitive?
+  (lambda (l)
+    (eq? (first l) 'primitive)))
+
+(define non-primitive?
+  (lambda (l)
+    (eq? (first l) 'non-primitive)))
+
+(define apply
+  (lambda (fun vals)
+    (cond
+      ((primitive? fun)
+       (apply-primitive (second fun) vals))
+      ((non-primitive? fun)
+       (apply-closure (second fun) vals)))))
+
+(define apply-primitive
+  (lambda (name vals)
+    (cond
+      ((eq? name 'cons)
+       (cons (first vals) (second vals)))
+      ((eq? name 'car)
+       (car (first vals)))
+      ((eq? name 'cdr)
+       (cdr (first vals)))
+      ((eq? name 'null?)
+       (null? (first vals)))
+      ((eq? name 'eq?)
+       (eq? (first vals) (second vals)))
+      ((eq? name 'atom?)
+       (:atom? (first vals)))
+      ((eq? name 'zero?)
+       (zero? (first vals)))
+      ((eq? name 'add1)
+       (add1 (first vals)))
+      ((eq? name 'sub1)
+       (sub1 (first vals)))
+      ((eq? name 'number?)
+       (number? (first vals))))))
+
+(define :atom?
+  (lambda (x)
+    (cond
+      ((atom? x) #t)
+      ((null? x) #f)
+      ((eq? (car x) 'primitive) #t)
+      ((eq? (car x) 'non-primitive) #t)
+      (else #f))))
+
+(define apply-closure
+  (lambda (closure vals)
+    (meaning (body-of closure)
+             (extend-table
+              (new-entry (formals-of closure)
+                         vals)
+              (body-of closure)))))
+
+(define evlis
+  (lambda (args table)
+    (cond
+      ((null? args) '())
+      (else
+       (cons (meaning (car args) table)
+             (evlis (cdr args) table))))))
 
 (define expression-to-action
   (lambda (e)
@@ -137,8 +237,8 @@
       ((eq? e 'eq?) *const)
       ((eq? e 'atom?) *const)
       ((eq? e 'zero?) *const)
-      ((eq? e 'add1?) *const)
-      ((eq? e 'sub1?) *const)
+      ((eq? e 'add1) *const)
+      ((eq? e 'sub1) *const)
       ((eq? e 'number?) *const)
       (else *identifier))))
 
@@ -153,48 +253,45 @@
          (else *application)))
       (else *application))))
 
-(define value
-  (lambda (e)
-    (meaning e '())))
-
 (define meaning
   (lambda (e table)
     ((expression-to-action e) e table)))
 
+(define value
+  (lambda (e)
+    (meaning e '())))
+
 ;; NOTE Test the interpreter.
 
-(assert (eq? (value '(car (quote (a b c))))
-             'a))
+(assert (equal? (value '(car (quote (a b c))))
+                'a))
 
-(assert (eq? (value '(quote (car (quote (a b c)))))
-             '(car (quote (a b c)))))
+(assert (equal? (value '(quote (car (quote (a b c)))))
+                '(car (quote (a b c)))))
 
-(assert (eq? (value '(quote (car (quote (a b c)))))
-             '(car (quote (a b c)))))
+(assert (equal? (value '(add1 6))
+                7))
 
-(assert (eq? (value '(add1 6))
-             7))
+(assert (equal? (value 6)
+                6))
 
-(assert (eq? (value 6)
-             6))
+(assert (equal? (value '(quote nothing))
+                'nothing))
 
-(assert (eq? (value '(quote nothing))
-             'nothing))
+(assert (equal? (value
+                 '((lambda (nothing)
+                     (cons nothing (quote ())))
+                   (quote
+                       (from nothing comes something))))
+                '((from nothing comes something))))
 
-(assert (eq? (value
-              '((lambda (nothing)
-                  (cons nothing (quote ())))
-                (quote
-                    (from nothing comes something))))
-             '((from nothing comes something))))
+(assert (equal? (value
+                 '((lambda (nothing)
+                     (cond
+                       (nothing (quote something))
+                       (else (quote nothing))))
+                   #t))
+                'something))
 
-(assert (eq? (value
-              '((lambda (nothing)
-                  (cond
-                    (nothing (quote something))
-                    (else (quote nothing))))
-                #t))
-             'something))
-
-(assert (eq? (value 'car)
-             '(primitive car)))
+(assert (equal? (value 'car)
+                '(primitive car)))
