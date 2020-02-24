@@ -1,5 +1,9 @@
 #lang racket
 
+(define atom?
+  (lambda (x)
+    (and (not (pair? x)) (not (null? x)))))
+
 (define assert
   (lambda (x)
     (cond
@@ -73,12 +77,91 @@
 (assert (eq? (lookup-in-table 'beverage table-1 identity)
              'good))
 
+;; The interpreter.
 
-;; (define value
-;;   (lambda ()
-;;     ...))
+;; Classification of expressions.
 
-;; NOTE test interpreter.
+;; NOTE just like in lambda calculus,
+;;   where we have the following classification of expressions.
+;; exp := identifier
+;;     | (lambda (identifier) exp) ;; lambda abstraction
+;;     | (exp exp) ;; lambda application
+
+;; We represent types by functions,
+;;   and we call them "actions".
+
+(define *const
+  (lambda (e table)
+    (cond
+      ((number? e) e)
+      ((eq? e #t) #t)
+      ((eq? e #f) #f)
+      (else (build 'primitive e)))))
+
+(define *quote
+  (lambda (e table)
+    ))
+
+(define *identifier
+  (lambda (e table)
+    ))
+
+(define *lambda
+  (lambda (e table)
+    ))
+
+(define *application
+  (lambda (e table)
+    ))
+
+(define *cond
+  (lambda (e table)
+    ))
+
+(define expression-to-action
+  (lambda (e)
+    (cond
+      ((atom? e) (atom-to-action e))
+      (else (list-to-action e)))))
+
+(define atom-to-action
+  (lambda (e)
+    (cond
+      ((number? e) *const)
+      ((eq? e #t) *const)
+      ((eq? e #f) *const)
+      ((eq? e 'cons) *const)
+      ((eq? e 'car) *const)
+      ((eq? e 'cdr) *const)
+      ((eq? e 'null?) *const)
+      ((eq? e 'eq?) *const)
+      ((eq? e 'atom?) *const)
+      ((eq? e 'zero?) *const)
+      ((eq? e 'add1?) *const)
+      ((eq? e 'sub1?) *const)
+      ((eq? e 'number?) *const)
+      (else *identifier))))
+
+(define list-to-action
+  (lambda (e)
+    (cond
+      ((atom? (car e))
+       (cond
+         ((eq? (car e) 'quote) *quote)
+         ((eq? (car e) 'lambda) *lambda)
+         ((eq? (car e) 'cond) *cond)
+         (else *application)))
+      (else *application))))
+
+(define value
+  (lambda (e)
+    (meaning e '())))
+
+(define meaning
+  (lambda (e table)
+    ((expression-to-action e) e table)))
+
+;; NOTE Test the interpreter.
 
 (assert (eq? (value '(car (quote (a b c))))
              'a))
@@ -93,7 +176,7 @@
              7))
 
 (assert (eq? (value 6)
-             7))
+             6))
 
 (assert (eq? (value '(quote nothing))
              'nothing))
@@ -112,3 +195,6 @@
                     (else (quote nothing))))
                 #t))
              'something))
+
+(assert (eq? (value 'car)
+             '(primitive car)))
